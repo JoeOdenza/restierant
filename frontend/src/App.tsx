@@ -12,10 +12,17 @@ function App() {
   // The number of the pins on the map and adding more pins
   const [pins, setPins] = useState<Pin[]>(samplePins)
 
+  //Attached to div DOM node to render
   const containerRef = useRef<HTMLDivElement>(null)
+
+  //Holds Map instance once created, reused across renders
   const mapRef = useRef<maplibregl.Map | null>(null)
+
+  // Allows holding of map clicks
   const markersRef = useRef<Map<string, maplibregl.Marker>>(new Map())
 
+  // Handle clicks, adds new pin to the given lat and lng, 
+  // increments label by 1 for each new pin
   const handleMapClick = (lng: number, lat: number) => {
     const pin: Pin = {
       id: crypto.randomUUID(),
@@ -28,6 +35,11 @@ function App() {
   const handleMapClickRef = useRef(handleMapClick)
   handleMapClickRef.current = handleMapClick
 
+  const handleDeletePin = (pinId: string) => {
+    setPins((prev) => prev.filter((pin) => pin.id !== pinId))
+  }
+
+  // Creation of map, renders once after React has painted DOM
   useEffect(() => {
     if (!containerRef.current) return
 
@@ -39,12 +51,17 @@ function App() {
     })
     map.addControl(new maplibregl.NavigationControl(), "top-right")
 
+    //Onclick listener, sets pin on current click location
     map.on("click", (e) => {
+      const target = e.originalEvent.target as HTMLElement
+      if (target.closest(".maplibregl-marker")) 
+        return
       handleMapClickRef.current(e.lngLat.lng, e.lngLat.lat)
     })
 
     mapRef.current = map
 
+    // Returns unmounting cleanup function
     return () => {
       markersRef.current.forEach((marker) => marker.remove())
       markersRef.current.clear()
@@ -53,14 +70,18 @@ function App() {
     }
   }, [])
 
+
+  //Creates markers and pins + handles marker removal logic
   useEffect(() => {
     const map = mapRef.current
     if (!map) return
 
+    //References marker Map<string, marker object>
     const markers = markersRef.current
     const nextIds = new Set(pins.map((pin) => pin.id))
 
     for (const [id, marker] of markers) {
+      // checking if pins have id, if not, remove marker from markers
       if (!nextIds.has(id)) {
         marker.remove()
         markers.delete(id)
@@ -73,11 +94,27 @@ function App() {
         existing.setLngLat([pin.lng, pin.lat])
         continue
       }
-      const popup = new maplibregl.Popup({ offset: 24 }).setText(pin.label)
+
+      // Create popup content
+      const popupContent = document.createElement("div")
+
+      const label = document.createElement("p")
+      label.textContent = pin.label
+
+      const deleteButton = document.createElement("button")
+      deleteButton.textContent = "Delete"
+      deleteButton.onclick = () => handleDeletePin(pin.id)
+
+      popupContent.appendChild(label)
+      popupContent.appendChild(deleteButton)
+      
+
+      const popup = new maplibregl.Popup({ offset: 24 }).setDOMContent(popupContent)
       const marker = new maplibregl.Marker()
         .setLngLat([pin.lng, pin.lat])
         .setPopup(popup)
         .addTo(map)
+
       markers.set(pin.id, marker)
     }
   }, [pins])
