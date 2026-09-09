@@ -39,18 +39,19 @@ function App() {
 
     setIsSearching(true)
     try {
-      const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(address)}&format=json&limit=1`
+      const url = `https://photon.komoot.io/api/?q=${encodeURIComponent(address)}&limit=1`
       const res = await fetch(url)
-      const results = await res.json()
+      const data = await res.json()
 
-      if (results.length === 0) {
+      if (!data.features || data.features.length === 0) {
         alert("No results found for that address")
         return
       }
 
-      const { lat, lon, display_name } = results[0]
-      const lngNum = parseFloat(lon)
-      const latNum = parseFloat(lat)
+      const feature = data.features[0]
+      const [lngNum, latNum] = feature.geometry.coordinates
+      const { name, city, state, country } = feature.properties
+      const display_name = [name, city, state, country].filter(Boolean).join(", ")
 
       // Remove any previous preview marker
       tempMarkerRef.current?.remove()
