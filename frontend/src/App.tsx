@@ -7,6 +7,9 @@ import './App.css'
 
 const OPENFREEMAP_STYLE = "https://tiles.openfreemap.org/styles/liberty"
 
+// Add VITE_MAPBOX_ACCESS_TOKEN=your_token_here to a .env.local file (git-ignored)
+const MAPBOX_ACCESS_TOKEN = import.meta.env.VITE_MAPBOX_ACCESS_TOKEN
+
 function App() {
 
   //Address state
@@ -29,17 +32,43 @@ function App() {
   // Holds the preview marker shown before a searched pin is confirmed
   const tempMarkerRef = useRef<maplibregl.Marker | null>(null)
 
+  // Handles deletion button press of pin, removes pin from list of pins
   const handleDeletePin = (pinId: string) => {
     setPins((prev) => prev.filter((pin) => pin.id !== pinId))
   }
 
-  const handleSearch = async (e: React.FormEvent) => {
+  // Finds a pin already on the map with the same address/name
+  const findExistingPin = (label: string) => {
+    const normalized = label.trim().toLowerCase()
+    return pins.find((pin) => pin.label.trim().toLowerCase() === normalized)
+  }
+
+  // Uses what the user typed as the base label, and fills in anything
+  // it's missing (city, state, etc.) from Mapbox's result
+  const buildLabel = (userInput: string, properties: Record<string, any>) => {
+    const context = properties.context ?? {}
+    const mapboxParts = [
+      properties.name,
+      context.place?.name,
+      context.region?.name,
+      context.country?.name,
+    ].filter(Boolean)
+
+    const trimmedInput = userInput.trim()
+    const lowerInput = trimmedInput.toLowerCase()
+    const missingParts = mapboxParts.filter((part) => !lowerInput.includes(part.toLowerCase()))
+
+    return [trimmedInput, ...missingParts].join(", ")
+  }
+
+  // Handles searching upon submission
+  const handleSearch = async (e: React.SubmitEvent) => {
     e.preventDefault()
     if (!address.trim()) return
 
     setIsSearching(true)
     try {
-      const url = `https://photon.komoot.io/api/?q=${encodeURIComponent(address)}&limit=1`
+      const url = `https://api.mapbox.com/search/geocode/v6/forward?q=${encodeURIComponent(address)}&limit=1&access_token=${MAPBOX_ACCESS_TOKEN}`
       const res = await fetch(url)
       const data = await res.json()
 
@@ -50,8 +79,19 @@ function App() {
 
       const feature = data.features[0]
       const [lngNum, latNum] = feature.geometry.coordinates
-      const { name, city, state, country } = feature.properties
-      const display_name = [name, city, state, country].filter(Boolean).join(", ")
+      const display_name = buildLabel(address, feature.properties)
+
+      // If a pin already exists here, just show its popup instead of a preview pin
+      const existingPin = findExistingPin(display_name)
+      if (existingPin) {
+        tempMarkerRef.current?.remove()
+        tempMarkerRef.current = null
+        setCandidate(null)
+        mapRef.current?.flyTo({ center: [lngNum, latNum], zoom: 14 })
+        markersRef.current.get(existingPin.id)?.togglePopup()
+        setAddress("")
+        return
+      }
 
       // Remove any previous preview marker
       tempMarkerRef.current?.remove()
@@ -71,6 +111,7 @@ function App() {
     }
   }
 
+  // Handles confirm pin button press, adds pin to the set of pins on the map
   const handleConfirmPin = () => {
     if (!candidate) return
     const pin: Pin = {
