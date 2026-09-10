@@ -15,7 +15,7 @@ function App() {
   //Address state
   const [address, setAddress] = useState("")
   const [isSearching, setIsSearching] = useState(false)
-  const [candidate, setCandidate] = useState<{ lng: number, lat: number; label: string} | null>(null)
+  const [candidate, setCandidate] = useState<{ lng: number; lat: number; name: string; address: string } | null>(null)
 
   // The number of the pins on the map and adding more pins
   const [pins, setPins] = useState<Pin[]>(samplePins)
@@ -37,28 +37,10 @@ function App() {
     setPins((prev) => prev.filter((pin) => pin.id !== pinId))
   }
 
-  // Finds a pin already on the map with the same address/name
-  const findExistingPin = (label: string) => {
-    const normalized = label.trim().toLowerCase()
-    return pins.find((pin) => pin.label.trim().toLowerCase() === normalized)
-  }
-
-  // Uses what the user typed as the base label, and fills in anything
-  // it's missing (city, state, etc.) from Mapbox's result
-  const buildLabel = (userInput: string, properties: Record<string, any>) => {
-    const context = properties.context ?? {}
-    const mapboxParts = [
-      properties.name,
-      context.place?.name,
-      context.region?.name,
-      context.country?.name,
-    ].filter(Boolean)
-
-    const trimmedInput = userInput.trim()
-    const lowerInput = trimmedInput.toLowerCase()
-    const missingParts = mapboxParts.filter((part) => !lowerInput.includes(part.toLowerCase()))
-
-    return [trimmedInput, ...missingParts].join(", ")
+  // Finds a pin already on the map with the same address
+  const findExistingPin = (address: string) => {
+    const normalized = address.trim().toLowerCase()
+    return pins.find((pin) => pin.address.trim().toLowerCase() === normalized)
   }
 
   // Handles searching upon submission
@@ -68,7 +50,7 @@ function App() {
 
     setIsSearching(true)
     try {
-      const url = `https://api.mapbox.com/search/geocode/v6/forward?q=${encodeURIComponent(address)}&limit=1&access_token=${MAPBOX_ACCESS_TOKEN}`
+      const url = `https://api.mapbox.com/search/searchbox/v1/forward?q=${encodeURIComponent(address)}&limit=1&access_token=${MAPBOX_ACCESS_TOKEN}`
       const res = await fetch(url)
       const data = await res.json()
 
@@ -79,10 +61,11 @@ function App() {
 
       const feature = data.features[0]
       const [lngNum, latNum] = feature.geometry.coordinates
-      const display_name = buildLabel(address, feature.properties)
+      const resultName: string = feature.properties.name
+      const resultAddress: string = feature.properties.full_address ?? feature.properties.place_formatted
 
       // If a pin already exists here, just show its popup instead of a preview pin
-      const existingPin = findExistingPin(display_name)
+      const existingPin = findExistingPin(resultAddress)
       if (existingPin) {
         tempMarkerRef.current?.remove()
         tempMarkerRef.current = null
@@ -102,7 +85,7 @@ function App() {
       tempMarkerRef.current = marker
 
       mapRef.current?.flyTo({ center: [lngNum, latNum], zoom: 14 })
-      setCandidate({ lng: lngNum, lat: latNum, label: display_name })
+      setCandidate({ lng: lngNum, lat: latNum, name: resultName, address: resultAddress })
     } catch (err) {
       console.error("Geocoding failed:", err)
       alert("Something went wrong searching for that address.")
@@ -118,7 +101,8 @@ function App() {
       id: crypto.randomUUID(),
       lng: candidate.lng,
       lat: candidate.lat,
-      label: candidate.label,
+      name: candidate.name,
+      address: candidate.address,
     }
     setPins((prev) => [...prev, pin])
 
@@ -202,17 +186,27 @@ function App() {
 
       // Create popup content
       const popupContent = document.createElement("div")
+      popupContent.style.minWidth = "180px"
 
-      const label = document.createElement("p")
-      label.textContent = pin.label
+      const nameEl = document.createElement("h4")
+      nameEl.textContent = pin.name
+      nameEl.style.margin = "0 0 4px"
+      nameEl.style.fontSize = "15px"
+
+      const addressEl = document.createElement("p")
+      addressEl.textContent = pin.address
+      addressEl.style.margin = "0 0 8px"
+      addressEl.style.fontSize = "13px"
+      addressEl.style.color = "#555"
 
       const deleteButton = document.createElement("button")
       deleteButton.textContent = "Delete"
       deleteButton.onclick = () => handleDeletePin(pin.id)
 
-      popupContent.appendChild(label)
+      popupContent.appendChild(nameEl)
+      popupContent.appendChild(addressEl)
       popupContent.appendChild(deleteButton)
-      
+
 
       const popup = new maplibregl.Popup({ offset: 24 }).setDOMContent(popupContent)
       const marker = new maplibregl.Marker()
@@ -244,7 +238,8 @@ function App() {
 
       {candidate && (
         <div style={{ position: 'absolute', top: 56, left: 12, zIndex: 1, background: 'white', padding: '8px', borderRadius: '4px', maxWidth: '260px' }}>
-          <p style={{ margin: '0 0 8px' }}>{candidate.label}</p>
+          <p style={{ margin: '0 0 2px', fontWeight: 600 }}>{candidate.name}</p>
+          <p style={{ margin: '0 0 8px', fontSize: '13px', color: '#555' }}>{candidate.address}</p>
           <button onClick={handleConfirmPin} style={{ marginRight: '8px' }}>Add Pin</button>
           <button onClick={handleCancelCandidate}>Cancel</button>
         </div>
