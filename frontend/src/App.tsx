@@ -6,15 +6,17 @@ import { samplePins } from "./samplePins.ts"
 import './App.css'
 
 const OPENFREEMAP_STYLE = "https://tiles.openfreemap.org/styles/liberty"
-
-// Add VITE_MAPBOX_ACCESS_TOKEN=your_token_here to a .env.local file (git-ignored)
 const MAPBOX_ACCESS_TOKEN = import.meta.env.VITE_MAPBOX_ACCESS_TOKEN
 
 function App() {
 
-  //Address state
+  // Address state
   const [address, setAddress] = useState("")
+
+  // Set when using search function
   const [isSearching, setIsSearching] = useState(false)
+
+  // Sets marker details before confirmation
   const [candidate, setCandidate] = useState<{ lng: number; lat: number; name: string; address: string } | null>(null)
 
   // The number of the pins on the map and adding more pins
@@ -23,7 +25,7 @@ function App() {
   //Attached to div DOM node to render
   const containerRef = useRef<HTMLDivElement>(null)
 
-  //Holds Map instance once created, reused across renders
+  // Holds Map instance once created, reused across renders
   const mapRef = useRef<maplibregl.Map | null>(null)
 
   // Allows holding of map clicks
@@ -150,7 +152,7 @@ function App() {
 
     mapRef.current = map
 
-    // Returns unmounting cleanup function
+    // Returns unmounting cleanup function (held until unmount event)
     return () => {
       markersRef.current.forEach((marker) => marker.remove())
       markersRef.current.clear()
@@ -160,7 +162,7 @@ function App() {
   }, [])
 
 
-  //Creates markers and pins + handles marker removal logic
+  // Creates markers and pins + handles marker removal logic
   useEffect(() => {
     const map = mapRef.current
     if (!map) return
